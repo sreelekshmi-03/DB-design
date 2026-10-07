@@ -10,11 +10,7 @@ from .middleware import (
     IsOwnerEmployer,
     IsOwnerCandidate,
 )
-
-
-# ----------------------------------------------------------
 # Serializers
-# ----------------------------------------------------------
 
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,31 +44,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
             "ats_score",
             "created_at",
         ]
-
-
-# ----------------------------------------------------------
 # Jobs
-# ----------------------------------------------------------
-
 class JobListCreateView(generics.ListCreateAPIView):
     serializer_class = JobSerializer
-    queryset = Job.objects.filter(status=Job.Status.OPEN)
-
+    queryset = Job.objects.filter(status=Job.Status.OPEN)   
     def get_permissions(self):
         if self.request.method == "POST":
             return [
                 permissions.IsAuthenticated(),
                 IsEmployer(),
             ]
-
         return [permissions.IsAuthenticated()]
-
     def perform_create(self, serializer):
         serializer.save(
             employer=self.request.user.employer_profile
         )
-
-
 class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = JobSerializer
     queryset = Job.objects.all()
@@ -80,38 +66,27 @@ class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerEmployer,
     ]
-
-
-# ----------------------------------------------------------
 # Applications
-# ----------------------------------------------------------
-
 class ApplicationCreateView(generics.CreateAPIView):
     serializer_class = ApplicationSerializer
     permission_classes = [
         permissions.IsAuthenticated,
         IsCandidate,
     ]
-
     def perform_create(self, serializer):
         serializer.save(
             candidate=self.request.user.candidate_profile
         )
-
-
 class MyApplicationsView(generics.ListAPIView):
     serializer_class = ApplicationSerializer
     permission_classes = [
         permissions.IsAuthenticated,
         IsCandidate,
     ]
-
     def get_queryset(self):
         return Application.objects.filter(
             candidate=self.request.user.candidate_profile
         )
-
-
 class ApplicationDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = ApplicationSerializer
     queryset = Application.objects.all()
@@ -119,18 +94,12 @@ class ApplicationDetailView(generics.RetrieveDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerCandidate,
     ]
-
-
-# ----------------------------------------------------------
 # Admin control
-# ----------------------------------------------------------
-
 class VerifyUserView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
         IsAdmin,
     ]
-
     def post(self, request, user_id):
         try:
             target = User.objects.get(id=user_id)

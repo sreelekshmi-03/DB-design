@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from app.resume_upload_path import resume_upload_path
 
 
 class TimeStampedModel(models.Model):
@@ -111,6 +112,7 @@ class Employer(TimeStampedModel, SoftDeleteModel):
 
 
 # ----------------------------------------------------------- Candidate
+# ----------------------------------------------------------- Candidate
 class Candidate(TimeStampedModel, SoftDeleteModel):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="candidate_profile"
@@ -118,9 +120,16 @@ class Candidate(TimeStampedModel, SoftDeleteModel):
     full_name = models.CharField(max_length=255, blank=True)
     phone = models.CharField(max_length=20, blank=True)
     resume = models.FileField(
-        upload_to="resumes/", blank=True,
+        upload_to=resume_upload_path,
+        blank=True,
         validators=[FileExtensionValidator(["pdf", "doc", "docx"])],
     )
+    resume_original_name = models.CharField(
+        max_length=255, blank=True,
+        help_text="The filename as the candidate uploaded it (for display only - never used on disk).",
+    )
+    resume_sha256 = models.CharField(max_length=64, blank=True, help_text="Used to detect duplicate re-uploads.")
+    resume_uploaded_at = models.DateTimeField(null=True, blank=True)
     skills = models.JSONField(default=list, blank=True, help_text='e.g. ["Python", "Django"]')
     education = models.JSONField(
         default=list, blank=True,
@@ -132,7 +141,7 @@ class Candidate(TimeStampedModel, SoftDeleteModel):
         help_text="Annual expected salary, in the platform's base currency.",
     )
 
-    def __str__(self):
+    def str(self):
         return self.full_name or self.user.email
 
 
