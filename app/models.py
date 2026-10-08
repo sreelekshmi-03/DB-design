@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser,UserManager as DjangoUserManager
 from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
@@ -46,7 +46,28 @@ class SoftDeleteModel(models.Model):
         self.deleted_at = None
         self.save(update_fields=["is_deleted", "deleted_at"])
 
+class UserManager(DjangoUserManager):
+    """
+    AbstractUser still carries a username field under the hood, even
+    though this project logs in with email (USERNAME_FIELD = "email").
+    Rather than forcing every caller (SignupView, createsuperuser, etc.)
+    to also supply a username, this manager derives one from the email
+    automatically, so User.objects.create_user(email=..., password=...)
+    just works.
+    """
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Users must have an email address.")
+        extra_fields.setdefault("username", email.split("@")[0])
+        return super().create_user(
+            username=extra_fields.pop("username"), email=email, password=password, **extra_fields
+        )
 
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("username", email.split("@")[0])
+        return super().create_superuser(
+            username=extra_fields.pop("username"), email=email, password=password, **extra_fields
+        )
 # ---------------------------------------------------------------- User
 class User(AbstractUser, TimeStampedModel):
     class Role(models.TextChoices):
@@ -60,7 +81,8 @@ class User(AbstractUser, TimeStampedModel):
     is_verified = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    REQUIRED_FIELDS = ["username"],
+    objects=UserManager()
 
     class Meta:
         ordering = ["-created_at"]
