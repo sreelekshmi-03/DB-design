@@ -1,8 +1,11 @@
+
 from rest_framework import generics, permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Job, Application, Candidate, User
+from .models import Job, Application, User
 from .middleware import (
     IsAdmin,
     IsEmployer,
@@ -10,6 +13,10 @@ from .middleware import (
     IsOwnerEmployer,
     IsOwnerCandidate,
 )
+from .filters import JobFilter, ApplicationFilter
+from .pagination import JobFeedCursorPagination
+
+
 # Serializers
 
 class JobSerializer(serializers.ModelSerializer):
@@ -44,10 +51,29 @@ class ApplicationSerializer(serializers.ModelSerializer):
             "ats_score",
             "created_at",
         ]
+
+
 # Jobs
+
 class JobListCreateView(generics.ListCreateAPIView):
     serializer_class = JobSerializer
-    queryset = Job.objects.filter(status=Job.Status.OPEN)   
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+    filterset_class = JobFilter
+    search_fields = ["title", "description", "location"]
+    ordering_fields = ["created_at", "title"]
+    pagination_class = JobFeedCursorPagination
+
+    def get_queryset(self):
+        return (
+            Job.objects
+            .filter(status=Job.Status.OPEN)
+            .select_related("employer", "employer__user")
+        )
+
     def get_permissions(self):
         if self.request.method == "POST":
             return [
@@ -55,10 +81,13 @@ class JobListCreateView(generics.ListCreateAPIView):
                 IsEmployer(),
             ]
         return [permissions.IsAuthenticated()]
+
     def perform_create(self, serializer):
         serializer.save(
             employer=self.request.user.employer_profile
         )
+
+
 class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = JobSerializer
     queryset = Job.objects.all()
@@ -66,27 +95,52 @@ class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerEmployer,
     ]
+
+
 # Applications
+
 class ApplicationCreateView(generics.CreateAPIView):
     serializer_class = ApplicationSerializer
     permission_classes = [
         permissions.IsAuthenticated,
         IsCandidate,
     ]
+
     def perform_create(self, serializer):
         serializer.save(
             candidate=self.request.user.candidate_profile
         )
+
+
 class MyApplicationsView(generics.ListAPIView):
     serializer_class = ApplicationSerializer
     permission_classes = [
         permissions.IsAuthenticated,
         IsCandidate,
     ]
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+    filterset_class = ApplicationFilter
+    search_fields = ["job__title", "job__location"]
+    ordering_fields = ["created_at", "status"]
+
     def get_queryset(self):
-        return Application.objects.filter(
-            candidate=self.request.user.candidate_profile
+        return (
+            Application.objects
+            .filter(
+                candidate=self.request.user.candidate_profile
+            )
+            .select_related(
+                "job",
+                "job__employer",
+                "candidate",
+            )
         )
+
+
 class ApplicationDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = ApplicationSerializer
     queryset = Application.objects.all()
@@ -94,12 +148,16 @@ class ApplicationDetailView(generics.RetrieveDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerCandidate,
     ]
+
+
 # Admin control
+
 class VerifyUserView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
         IsAdmin,
     ]
+
     def post(self, request, user_id):
         try:
             target = User.objects.get(id=user_id)

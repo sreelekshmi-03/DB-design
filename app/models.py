@@ -7,7 +7,7 @@ from app.resume_upload_path import resume_upload_path
 
 
 class TimeStampedModel(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True,db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -178,7 +178,7 @@ class Job(TimeStampedModel):
     title = models.CharField(max_length=255)
     description = models.TextField()
     location = models.CharField(max_length=255, blank=True)
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT,db_index=True,)
 
     class Meta:
         ordering = ["-created_at"]
@@ -197,7 +197,7 @@ class Application(TimeStampedModel):
 
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="applications")
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name="applications")
-    status = models.CharField(max_length=15, choices=Status.choices, default=Status.APPLIED)
+    status = models.CharField(max_length=15, choices=Status.choices, default=Status.APPLIED,db_index=True,)
     ats_score = models.FloatField(null=True, blank=True)
 
     class Meta:
