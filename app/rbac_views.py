@@ -26,13 +26,44 @@ class JobSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
+            "skills",
+            "experience_years",
+            "salary_min",
+            "salary_max",
             "location",
+            "job_type",
             "status",
             "employer",
             "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["employer", "created_at"]
+        read_only_fields = [
+            "id",
+            "employer",
+            "created_at",
+            "updated_at",
+        ]
 
+    def validate(self, attrs):
+        salary_min = attrs.get(
+            "salary_min",
+            getattr(self.instance, "salary_min", None),
+        )
+        salary_max = attrs.get(
+            "salary_max",
+            getattr(self.instance, "salary_max", None),
+        )
+
+        if (
+            salary_min is not None
+            and salary_max is not None
+            and salary_max < salary_min
+        ):
+            raise serializers.ValidationError({
+                "salary_max": "Maximum salary must be greater than or equal to minimum salary."
+            })
+
+        return attrs
 
 class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -88,13 +119,36 @@ class JobListCreateView(generics.ListCreateAPIView):
         )
 
 
+
 class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = JobSerializer
-    queryset = Job.objects.all()
     permission_classes = [
         permissions.IsAuthenticated,
+        IsEmployer,
         IsOwnerEmployer,
     ]
+
+    def get_queryset(self):
+        return (
+            Job.objects
+            .filter(employer__user=self.request.user)
+            .select_related("employer", "employer__user")
+        )
+
+
+class EmployerJobListView(generics.ListAPIView):
+    serializer_class = JobSerializer
+    permission_classes = [
+        permissions.IsAuthenticated,
+        IsEmployer,
+    ]
+
+    def get_queryset(self):
+        return (
+            Job.objects
+            .filter(employer__user=self.request.user)
+            .select_related("employer", "employer__user")
+        )
 
 
 # Applications
