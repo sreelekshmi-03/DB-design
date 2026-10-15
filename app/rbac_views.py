@@ -148,16 +148,12 @@ class ApplicationDetailView(generics.RetrieveDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerCandidate,
     ]
-
-
 # Admin control
-
 class VerifyUserView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
         IsAdmin,
     ]
-
     def post(self, request, user_id):
         try:
             target = User.objects.get(id=user_id)
@@ -166,10 +162,8 @@ class VerifyUserView(APIView):
                 {"detail": "User not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
         target.is_verified = True
         target.save(update_fields=["is_verified"])
-
         return Response(
             {
                 "detail": f"{target.email} marked as verified."

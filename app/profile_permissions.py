@@ -1,8 +1,6 @@
 from rest_framework.permissions import BasePermission
 
 from .models import User
-
-
 class IsSelfOrAdmin(BasePermission):
    
     message = "You can only access your own profile."
