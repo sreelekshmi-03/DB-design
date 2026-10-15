@@ -137,3 +137,180 @@ class Day14APITests(TestCase):
         sql = str(queryset.query).upper()
         self.assertIn("JOIN", sql)
         self.assertIn("EMPLOYER", sql)
+
+class Day16EmployerJobAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.employer_user = User.objects.create_user(
+            email="employer16@example.com",
+            password="TestPass123!",
+            role=User.Role.EMPLOYER,
+        )
+        self.employer, _ = Employer.objects.get_or_create(
+            user=self.employer_user,
+            defaults={"company_name": "Employer One"},
+        )
+
+        self.other_employer_user = User.objects.create_user(
+            email="employer_two16@example.com",
+            password="TestPass123!",
+            role=User.Role.EMPLOYER,
+        )
+        self.other_employer, _ = Employer.objects.get_or_create(
+            user=self.other_employer_user,
+            defaults={"company_name": "Employer Two"},
+        )
+
+        self.candidate_user = User.objects.create_user(
+            email="candidate16@example.com",
+            password="TestPass123!",
+            role=User.Role.CANDIDATE,
+        )
+        Candidate.objects.get_or_create(
+            user=self.candidate_user,
+            defaults={"full_name": "Test Candidate"},
+        )
+
+    def create_job(self, employer=None, **overrides):
+        data = {
+            "title": "Python Developer",
+            "description": "Build Python applications.",
+            "location": "Kochi",
+            "status": Job.Status.DRAFT,
+        }
+        data.update(overrides)
+        return Job.objects.create(
+            employer=employer or self.employer,
+            **data,
+        )
+
+    def test_employer_can_create_job(self):
+        self.client.force_authenticate(user=self.employer_user)
+
+        response = self.client.post(
+            reverse("job-list-create"),
+            {
+                "title": "Backend Developer",
+                "description": "Develop APIs.",
+                "location": "Kochi",
+                "salary_min": 30000,
+                "salary_max": 60000,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            Job.objects.get(id=response.data["id"]).employer,
+            self.employer,
+        )
+
+    def test_candidate_cannot_create_job(self):
+        self.client.force_authenticate(user=self.candidate_user)
+
+        response = self.client.post(
+            reverse("job-list-create"),
+            {
+                "title": "Backend Developer",
+                "description": "Develop APIs.",
+                "location": "Kochi",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Job.objects.filter(title="Backend Developer").exists()
+        )
+
+    def test_employer_cannot_access_another_employers_job(self):
+        job = self.create_job(employer=self.other_employer)
+        self.client.force_authenticate(user=self.employer_user)
+
+        response = self.client.get(
+            reverse("job-detail", kwargs={"pk": job.pk})
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_employer_cannot_edit_another_employers_job(self):
+        job = self.create_job(employer=self.other_employer)
+        self.client.force_authenticate(user=self.employer_user)
+
+        response = self.client.patch(
+            reverse("job-detail", kwargs={"pk": job.pk}),
+            {"title": "Hijacked title"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+        job.refresh_from_db()
+        self.assertEqual(job.title, "Python Developer")
+
+    def test_invalid_salary_range_is_rejected(self):
+        self.client.force_authenticate(user=self.employer_user)
+
+        response = self.client.post(
+            reverse("job-list-create"),
+            {
+                "title": "Salary Test",
+                "description": "Test salary validation.",
+                "location": "Kochi",
+                "salary_min": 80000,
+                "salary_max": 40000,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("salary_max", response.data["errors"])
+    def test_employer_can_activate_and_deactivate_job(self):
+        job = self.create_job()
+        self.client.force_authenticate(user=self.employer_user)
+        url = reverse("job-detail", kwargs={"pk": job.pk})
+
+        activate_response = self.client.patch(
+            url,
+            {"status": Job.Status.OPEN},
+            format="json",
+        )
+        self.assertEqual(activate_response.status_code, 200)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.OPEN)
+
+        deactivate_response = self.client.patch(
+            url,
+            {"status": Job.Status.CLOSED},
+            format="json",
+        )
+        self.assertEqual(deactivate_response.status_code, 200)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, Job.Status.CLOSED)
+
+    def test_employer_job_list_includes_own_draft_and_closed_jobs(self):
+        draft_job = self.create_job(title="Draft Job")
+        closed_job = self.create_job(
+            title="Closed Job",
+            status=Job.Status.CLOSED,
+        )
+        self.create_job(
+            employer=self.other_employer,
+            title="Other Employer Job",
+        )
+
+        self.client.force_authenticate(user=self.employer_user)
+        response = self.client.get(reverse("employer-job-list"))
+
+        self.assertEqual(response.status_code, 200)
+        results = response.data.get("results", response.data)
+        returned_ids = {item["id"] for item in results}
+
+        self.assertIn(draft_job.id, returned_ids)
+        self.assertIn(closed_job.id, returned_ids)
+        self.assertNotIn(
+            Job.objects.get(title="Other Employer Job").id,
+            returned_ids,
+        )

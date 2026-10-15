@@ -22,16 +22,14 @@ class SoftDeleteManager(models.Manager):
 
 class SoftDeleteModel(models.Model):
     """
-    Adds soft-delete instead of a real DB delete. Day 11 asks for "soft
-    delete logic" on profiles: a candidate/employer who deactivates their
-    account shouldn't vanish from Application/Job history - their data
-    just stops showing up in normal queries and normal profile lookups.
+    Adds soft-delete instead of permanently deleting database records.
     """
+
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-    objects = SoftDeleteManager()        # default: excludes deleted rows
-    all_objects = models.Manager()       # explicit: includes everything (admin use)
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
     class Meta:
         abstract = True
@@ -45,7 +43,6 @@ class SoftDeleteModel(models.Model):
         self.is_deleted = False
         self.deleted_at = None
         self.save(update_fields=["is_deleted", "deleted_at"])
-
 class UserManager(DjangoUserManager):
     """
     AbstractUser still carries a username field under the hood, even
@@ -168,24 +165,64 @@ class Candidate(TimeStampedModel, SoftDeleteModel):
 
 
 # ----------------------------------------------------------------- Job
+
+# ----------------------------------------------------------------- Job
 class Job(TimeStampedModel):
+    class JobType(models.TextChoices):
+        FULL_TIME = "full_time", "Full-time"
+        PART_TIME = "part_time", "Part-time"
+        CONTRACT = "contract", "Contract"
+        INTERNSHIP = "internship", "Internship"
+        REMOTE = "remote", "Remote"
+
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         OPEN = "open", "Open"
         CLOSED = "closed", "Closed"
 
-    employer = models.ForeignKey(Employer, on_delete=models.CASCADE, related_name="jobs")
+    employer = models.ForeignKey(
+        Employer,
+        on_delete=models.CASCADE,
+        related_name="jobs",
+    )
     title = models.CharField(max_length=255)
     description = models.TextField()
+    skills = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Example: ["Python", "Django", "REST APIs"]',
+    )
+    experience_years = models.PositiveSmallIntegerField(default=0)
+    salary_min = models.PositiveIntegerField(null=True, blank=True)
+    salary_max = models.PositiveIntegerField(null=True, blank=True)
     location = models.CharField(max_length=255, blank=True)
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT,db_index=True,)
+    job_type = models.CharField(
+        max_length=20,
+        choices=JobType.choices,
+        default=JobType.FULL_TIME,
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(salary_min__isnull=True)
+                    | models.Q(salary_max__isnull=True)
+                    | models.Q(salary_max__gte=models.F("salary_min"))
+                ),
+                name="job_salary_max_gte_min",
+            ),
+        ]
 
     def __str__(self):
         return self.title
-
 
 # --------------------------------------------------------- Application
 class Application(TimeStampedModel):

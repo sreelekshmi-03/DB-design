@@ -13,7 +13,7 @@ from .views import (
     AdminEmployerVerifyView,
     AdminRestoreProfileView,
     ResumeUploadView,
-)
+    )
 
 from .rbac_views import (
     JobListCreateView,
@@ -22,6 +22,7 @@ from .rbac_views import (
     MyApplicationsView,
     ApplicationDetailView,
     VerifyUserView,
+    EmployerJobListView,
 )
 
 
@@ -32,6 +33,8 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/me/", MeView.as_view(), name="me"),
+    path("employer/jobs/",EmployerJobListView.as_view(),name="employer-job-list",
+),
 
     # Jobs
     path(
