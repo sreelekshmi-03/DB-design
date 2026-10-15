@@ -1,6 +1,6 @@
 from pathlib import Path
 import environ
-
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 # Environment variables
@@ -156,4 +156,11 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
