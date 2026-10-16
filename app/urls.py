@@ -1,3 +1,4 @@
+
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -13,11 +14,13 @@ from .views import (
     AdminEmployerVerifyView,
     AdminRestoreProfileView,
     ResumeUploadView,
-    )
+)
 
 from .rbac_views import (
     JobListCreateView,
     JobDetailView,
+    FeaturedJobsView,
+    LatestJobsView,
     ApplicationCreateView,
     MyApplicationsView,
     ApplicationDetailView,
@@ -33,14 +36,29 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/me/", MeView.as_view(), name="me"),
-    path("employer/jobs/",EmployerJobListView.as_view(),name="employer-job-list",
-),
 
-    # Jobs
+    # Employer job management
+    path(
+        "employer/jobs/",
+        EmployerJobListView.as_view(),
+        name="employer-job-list",
+    ),
+
+    # Public job discovery
     path(
         "jobs/",
         JobListCreateView.as_view(),
         name="job-list-create",
+    ),
+    path(
+        "jobs/featured/",
+        FeaturedJobsView.as_view(),
+        name="featured-jobs",
+    ),
+    path(
+        "jobs/latest/",
+        LatestJobsView.as_view(),
+        name="latest-jobs",
     ),
     path(
         "jobs/<int:pk>/",

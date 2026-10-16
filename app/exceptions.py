@@ -88,7 +88,6 @@ def _extract_message_and_errors(data):
         message= str(data["detail"])
         extra={k: v for k,v in data.items() if k!="detail"}
         return message,(extra or None)
-
     if isinstance(data, dict) and data:
         first_field = next(iter(data))
         first_error = data[first_field]

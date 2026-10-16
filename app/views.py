@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate
+﻿from django.contrib.auth import authenticate
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
@@ -21,20 +21,15 @@ from .resume_validators import (
     validate_resume_file,
     compute_file_hash,
 )
-
-
 # ============================================================
 # AUTHENTICATION
 # ============================================================
-
 class SignupView(APIView):
     permission_classes = [permissions.AllowAny]
-
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
         role = request.data.get("role")
-
         if not email or not password or not role:
             return Response(
                 {
@@ -42,14 +37,11 @@ class SignupView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         email = email.strip().lower()
-
         valid_roles = {
             User.Role.CANDIDATE,
             User.Role.EMPLOYER,
         }
-
         if role not in valid_roles:
             return Response(
                 {
@@ -60,20 +52,17 @@ class SignupView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         if User.objects.filter(email=email).exists():
             return Response(
                 {"detail": "A user with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         with transaction.atomic():
             user = User.objects.create_user(
                 email=email,
                 password=password,
                 role=role,
             )
-
             if role == User.Role.CANDIDATE:
                 Candidate.objects.get_or_create(
                     user=user,
@@ -84,7 +73,6 @@ class SignupView(APIView):
                         "experience_years": 0,
                     },
                 )
-
             elif role == User.Role.EMPLOYER:
                 Employer.objects.get_or_create(
                     user=user,
@@ -92,9 +80,7 @@ class SignupView(APIView):
                         "company_name": "",
                     },
                 )
-
         refresh = RefreshToken.for_user(user)
-
         return Response(
             {
                 "message": "Signup successful.",
@@ -108,8 +94,6 @@ class SignupView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
-
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -124,27 +108,22 @@ class LoginView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         email = email.strip().lower()
-
         user = authenticate(
             request=request,
             email=email,
             password=password,
         )
-
         if user is None:
             return Response(
                 {"detail": "Invalid email or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-
         if getattr(user, "is_deleted", False):
             return Response(
                 {"detail": "This account has been deleted."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
         refresh = RefreshToken.for_user(user)
 
         return Response(
@@ -160,8 +139,6 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -173,7 +150,6 @@ class LogoutView(APIView):
                 {"detail": "Refresh token is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         try:
             token = RefreshToken(refresh_token)
             token.blacklist()
@@ -182,20 +158,15 @@ class LogoutView(APIView):
                 {"detail": "Logout successful."},
                 status=status.HTTP_205_RESET_CONTENT,
             )
-
         except Exception:
             return Response(
                 {"detail": "Invalid refresh token."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-
     def get(self, request):
         user = request.user
-
         data = {
             "id": user.id,
             "email": user.email,
@@ -207,14 +178,10 @@ class MeView(APIView):
             ),
             "is_active": user.is_active,
         }
-
         return Response(data, status=status.HTTP_200_OK)
-
-
 # ============================================================
 # CANDIDATE PROFILE
 # ============================================================
-
 class MyCandidateProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = CandidateProfileSerializer
     permission_classes = [
@@ -226,8 +193,6 @@ class MyCandidateProfileView(generics.RetrieveUpdateAPIView):
             Candidate,
             user=self.request.user,
         )
-
-
 class CandidateProfileDetailView(generics.RetrieveUpdateAPIView):
     queryset = Candidate.objects.all()
     serializer_class = CandidateProfileSerializer
@@ -235,8 +200,6 @@ class CandidateProfileDetailView(generics.RetrieveUpdateAPIView):
         permissions.IsAuthenticated,
         IsSelfOrAdmin,
     ]
-
-
 # ============================================================
 # EMPLOYER PROFILE
 # ============================================================
@@ -246,14 +209,11 @@ class MyEmployerProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [
         permissions.IsAuthenticated,
     ]
-
     def get_object(self):
         return get_object_or_404(
             Employer,
             user=self.request.user,
         )
-
-
 class EmployerProfileDetailView(generics.RetrieveUpdateAPIView):
     queryset = Employer.objects.all()
     serializer_class = EmployerProfileSerializer
@@ -261,22 +221,17 @@ class EmployerProfileDetailView(generics.RetrieveUpdateAPIView):
         permissions.IsAuthenticated,
         IsSelfOrAdmin,
     ]
-
-
 # ============================================================
 # RESUME UPLOAD
 # ============================================================
-
 class ResumeUploadView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
     ]
-
     parser_classes = [
         MultiPartParser,
         FormParser,
     ]
-
     def post(self, request):
         if request.user.role != User.Role.CANDIDATE:
             return Response(
@@ -287,12 +242,10 @@ class ResumeUploadView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-
         candidate = get_object_or_404(
             Candidate,
             user=request.user,
         )
-
         resume = request.FILES.get("resume")
 
         if not resume:
@@ -300,7 +253,6 @@ class ResumeUploadView(APIView):
                 {"detail": "Resume file is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         try:
             validate_resume_file(resume)
         except ValidationError as exc:
@@ -308,16 +260,13 @@ class ResumeUploadView(APIView):
                 {"detail": exc.messages},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         # Check for duplicate resume
         new_hash = compute_file_hash(resume)
-
         if candidate.resume:
             try:
                 existing_hash = compute_file_hash(
                     candidate.resume.file
                 )
-
                 if existing_hash == new_hash:
                     return Response(
                         {
@@ -328,38 +277,28 @@ class ResumeUploadView(APIView):
                         },
                         status=status.HTTP_200_OK,
                     )
-
             except (FileNotFoundError, ValueError):
                 pass
-
         old_resume = candidate.resume
-
         # Generate a safe unique filename
         extension = resume.name.rsplit(".", 1)[-1].lower()
-
         import uuid
-
         filename = (
             f"resume_{candidate.id}_"
             f"{uuid.uuid4().hex}.{extension}"
         )
-
         resume.name = filename
-
         candidate.resume = resume
         candidate.save(update_fields=["resume"])
-
         # Delete previous resume after successful replacement
         if old_resume:
             try:
                 old_resume.delete(save=False)
             except Exception:
                 pass
-
         resume_url = request.build_absolute_uri(
             candidate.resume.url
         )
-
         return Response(
             {
                 "message": "Resume uploaded successfully.",
@@ -368,34 +307,27 @@ class ResumeUploadView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
 # ============================================================
 # ADMIN PROFILE MANAGEMENT
 # ============================================================
-
 class AdminEmployerVerifyView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
     ]
-
     def post(self, request, pk):
         if request.user.role != User.Role.ADMIN:
             return Response(
                 {"detail": "Only admins can verify employers."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
         employer = get_object_or_404(
             Employer,
             pk=pk,
         )
-
         employer.is_company_verified = True
         employer.save(
             update_fields=["is_company_verified"]
         )
-
         return Response(
             {
                 "message": (
@@ -408,32 +340,26 @@ class AdminEmployerVerifyView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
 class AdminRestoreProfileView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
     ]
-
     def post(self, request, kind, pk):
         if request.user.role != User.Role.ADMIN:
             return Response(
                 {"detail": "Only admins can restore profiles."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
         if kind == "candidate":
             profile = get_object_or_404(
                 Candidate,
                 pk=pk,
             )
-
         elif kind == "employer":
             profile = get_object_or_404(
                 Employer,
                 pk=pk,
             )
-
         else:
             return Response(
                 {
@@ -444,10 +370,8 @@ class AdminRestoreProfileView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         profile.is_deleted = False
         profile.save(update_fields=["is_deleted"])
-
         return Response(
             {
                 "message": (
