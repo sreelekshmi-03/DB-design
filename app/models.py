@@ -1,13 +1,15 @@
+
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser,UserManager as DjangoUserManager
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+
 from app.resume_upload_path import resume_upload_path
 
 
 class TimeStampedModel(models.Model):
-    created_at = models.DateTimeField(auto_now_add=True,db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -15,15 +17,14 @@ class TimeStampedModel(models.Model):
 
 
 class SoftDeleteManager(models.Manager):
-    """Default manager - hides soft-deleted rows from every normal query."""
+    """Default manager - hides soft-deleted rows from normal queries."""
+
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
 
 
 class SoftDeleteModel(models.Model):
-    """
-    Adds soft-delete instead of permanently deleting database records.
-    """
+    """Adds soft-delete instead of permanently deleting records."""
 
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -43,29 +44,38 @@ class SoftDeleteModel(models.Model):
         self.is_deleted = False
         self.deleted_at = None
         self.save(update_fields=["is_deleted", "deleted_at"])
+
+
 class UserManager(DjangoUserManager):
-    """
-    AbstractUser still carries a username field under the hood, even
-    though this project logs in with email (USERNAME_FIELD = "email").
-    Rather than forcing every caller (SignupView, createsuperuser, etc.)
-    to also supply a username, this manager derives one from the email
-    automatically, so User.objects.create_user(email=..., password=...)
-    just works.
-    """
+    """Derive the username from email when creating a user."""
+
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("Users must have an email address.")
+
         extra_fields.setdefault("username", email.split("@")[0])
+
         return super().create_user(
-            username=extra_fields.pop("username"), email=email, password=password, **extra_fields
+            username=extra_fields.pop("username"),
+            email=email,
+            password=password,
+            **extra_fields,
         )
 
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault("username", email.split("@")[0])
+
         return super().create_superuser(
-            username=extra_fields.pop("username"), email=email, password=password, **extra_fields
+            username=extra_fields.pop("username"),
+            email=email,
+            password=password,
+            **extra_fields,
         )
-# ---------------------------------------------------------------- User
+
+
+# -----------------------------------------------------------------
+# User
+# -----------------------------------------------------------------
 class User(AbstractUser, TimeStampedModel):
     class Role(models.TextChoices):
         ADMIN = "admin", "Admin"
@@ -74,12 +84,16 @@ class User(AbstractUser, TimeStampedModel):
 
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True)
-    role = models.CharField(max_length=20, choices=Role.choices, default=Role.CANDIDATE)
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.CANDIDATE,
+    )
     is_verified = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"],
-    objects=UserManager()
+    REQUIRED_FIELDS = ["username"]
+    objects = UserManager()
 
     class Meta:
         ordering = ["-created_at"]
@@ -100,7 +114,9 @@ class User(AbstractUser, TimeStampedModel):
         return self.role == self.Role.CANDIDATE
 
 
-# ------------------------------------------------------------ Employer
+# -----------------------------------------------------------------
+# Employer
+# -----------------------------------------------------------------
 class Employer(TimeStampedModel, SoftDeleteModel):
     class CompanySize(models.TextChoices):
         MICRO = "1-10", "1-10 employees"
@@ -110,17 +126,30 @@ class Employer(TimeStampedModel, SoftDeleteModel):
         ENTERPRISE = "1000+", "1000+ employees"
 
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="employer_profile"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="employer_profile",
     )
     company_name = models.CharField(max_length=255, blank=True)
     domain = models.CharField(
-        max_length=255, blank=True,
-        help_text="Company website domain, e.g. zecpath.com (used to sanity-check company emails).",
+        max_length=255,
+        blank=True,
+        help_text=(
+            "Company website domain, e.g. zecpath.com "
+            "(used to sanity-check company emails)."
+        ),
     )
     industry = models.CharField(max_length=100, blank=True)
-    company_size = models.CharField(max_length=20, choices=CompanySize.choices, blank=True)
+    company_size = models.CharField(
+        max_length=20,
+        choices=CompanySize.choices,
+        blank=True,
+    )
     is_company_verified = models.BooleanField(
-        default=False, help_text="Set by an admin once the company/domain is manually verified."
+        default=False,
+        help_text=(
+            "Set by an admin once the company/domain is manually verified."
+        ),
     )
 
     class Meta:
@@ -130,11 +159,14 @@ class Employer(TimeStampedModel, SoftDeleteModel):
         return self.company_name or self.user.email
 
 
-# ----------------------------------------------------------- Candidate
-# ----------------------------------------------------------- Candidate
+# -----------------------------------------------------------------
+# Candidate
+# -----------------------------------------------------------------
 class Candidate(TimeStampedModel, SoftDeleteModel):
     user = models.OneToOneField(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="candidate_profile"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="candidate_profile",
     )
     full_name = models.CharField(max_length=255, blank=True)
     phone = models.CharField(max_length=20, blank=True)
@@ -144,29 +176,47 @@ class Candidate(TimeStampedModel, SoftDeleteModel):
         validators=[FileExtensionValidator(["pdf", "doc", "docx"])],
     )
     resume_original_name = models.CharField(
-        max_length=255, blank=True,
-        help_text="The filename as the candidate uploaded it (for display only - never used on disk).",
+        max_length=255,
+        blank=True,
+        help_text=(
+            "The filename as the candidate uploaded it; "
+            "never used on disk."
+        ),
     )
-    resume_sha256 = models.CharField(max_length=64, blank=True, help_text="Used to detect duplicate re-uploads.")
+    resume_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Used to detect duplicate re-uploads.",
+    )
     resume_uploaded_at = models.DateTimeField(null=True, blank=True)
-    skills = models.JSONField(default=list, blank=True, help_text='e.g. ["Python", "Django"]')
+    skills = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='e.g. ["Python", "Django"]',
+    )
     education = models.JSONField(
-        default=list, blank=True,
-        help_text='e.g. [{"degree": "B.Tech CSE", "institution": "KTU", "year": 2025}]',
+        default=list,
+        blank=True,
+        help_text=(
+            'e.g. [{"degree": "B.Tech CSE", '
+            '"institution": "KTU", "year": 2025}]'
+        ),
     )
     experience_years = models.PositiveSmallIntegerField(default=0)
     expected_salary = models.PositiveIntegerField(
-        null=True, blank=True, validators=[MinValueValidator(0)],
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
         help_text="Annual expected salary, in the platform's base currency.",
     )
 
-    def str(self):
+    def __str__(self):
         return self.full_name or self.user.email
 
 
-# ----------------------------------------------------------------- Job
-
-# ----------------------------------------------------------------- Job
+# -----------------------------------------------------------------
+# Job
+# -----------------------------------------------------------------
 class Job(TimeStampedModel):
     class JobType(models.TextChoices):
         FULL_TIME = "full_time", "Full-time"
@@ -208,6 +258,10 @@ class Job(TimeStampedModel):
         db_index=True,
     )
 
+    # Day 17: allows administrators to mark selected jobs as featured.
+    # Public API employers must not be allowed to set this field themselves.
+    is_featured = models.BooleanField(default=False, db_index=True)
+
     class Meta:
         ordering = ["-created_at"]
         constraints = [
@@ -215,7 +269,9 @@ class Job(TimeStampedModel):
                 condition=(
                     models.Q(salary_min__isnull=True)
                     | models.Q(salary_max__isnull=True)
-                    | models.Q(salary_max__gte=models.F("salary_min"))
+                    | models.Q(
+                        salary_max__gte=models.F("salary_min")
+                    )
                 ),
                 name="job_salary_max_gte_min",
             ),
@@ -224,7 +280,10 @@ class Job(TimeStampedModel):
     def __str__(self):
         return self.title
 
-# --------------------------------------------------------- Application
+
+# -----------------------------------------------------------------
+# Application
+# -----------------------------------------------------------------
 class Application(TimeStampedModel):
     class Status(models.TextChoices):
         APPLIED = "applied", "Applied"
@@ -232,15 +291,31 @@ class Application(TimeStampedModel):
         SHORTLISTED = "shortlisted", "Shortlisted"
         REJECTED = "rejected", "Rejected"
 
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="applications")
-    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name="applications")
-    status = models.CharField(max_length=15, choices=Status.choices, default=Status.APPLIED,db_index=True,)
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name="applications",
+    )
+    candidate = models.ForeignKey(
+        Candidate,
+        on_delete=models.CASCADE,
+        related_name="applications",
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=Status.choices,
+        default=Status.APPLIED,
+        db_index=True,
+    )
     ats_score = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
         constraints = [
-            models.UniqueConstraint(fields=["job", "candidate"], name="unique_application_per_job")
+            models.UniqueConstraint(
+                fields=["job", "candidate"],
+                name="unique_application_per_job",
+            ),
         ]
 
     def __str__(self):

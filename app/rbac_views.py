@@ -17,7 +17,9 @@ from .filters import JobFilter, ApplicationFilter
 from .pagination import JobFeedCursorPagination
 
 
+# ------------------------------------------------------------------
 # Serializers
+# ------------------------------------------------------------------
 
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,12 +35,14 @@ class JobSerializer(serializers.ModelSerializer):
             "location",
             "job_type",
             "status",
+            "is_featured",
             "employer",
             "created_at",
             "updated_at",
         ]
         read_only_fields = [
             "id",
+            "is_featured",
             "employer",
             "created_at",
             "updated_at",
@@ -60,10 +64,14 @@ class JobSerializer(serializers.ModelSerializer):
             and salary_max < salary_min
         ):
             raise serializers.ValidationError({
-                "salary_max": "Maximum salary must be greater than or equal to minimum salary."
+                "salary_max": (
+                    "Maximum salary must be greater than or equal "
+                    "to minimum salary."
+                )
             })
 
         return attrs
+
 
 class ApplicationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -84,7 +92,9 @@ class ApplicationSerializer(serializers.ModelSerializer):
         ]
 
 
-# Jobs
+# ------------------------------------------------------------------
+# Public job discovery
+# ------------------------------------------------------------------
 
 class JobListCreateView(generics.ListCreateAPIView):
     serializer_class = JobSerializer
@@ -94,8 +104,20 @@ class JobListCreateView(generics.ListCreateAPIView):
         OrderingFilter,
     ]
     filterset_class = JobFilter
-    search_fields = ["title", "description", "location"]
-    ordering_fields = ["created_at", "title"]
+    search_fields = [
+        "title",
+        "description",
+        "location",
+        "skills",
+        "employer__company_name",
+    ]
+    ordering_fields = [
+        "created_at",
+        "title",
+        "salary_min",
+        "salary_max",
+        "experience_years",
+    ]
     pagination_class = JobFeedCursorPagination
 
     def get_queryset(self):
@@ -111,7 +133,10 @@ class JobListCreateView(generics.ListCreateAPIView):
                 permissions.IsAuthenticated(),
                 IsEmployer(),
             ]
-        return [permissions.IsAuthenticated()]
+
+        # Public GET requests allow candidates and logged-out visitors
+        # to discover open jobs.
+        return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
         serializer.save(
@@ -119,6 +144,40 @@ class JobListCreateView(generics.ListCreateAPIView):
         )
 
 
+class FeaturedJobsView(generics.ListAPIView):
+    serializer_class = JobSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = JobFeedCursorPagination
+
+    def get_queryset(self):
+        return (
+            Job.objects
+            .filter(
+                status=Job.Status.OPEN,
+                is_featured=True,
+            )
+            .select_related("employer", "employer__user")
+            .order_by("-created_at")
+        )
+
+
+class LatestJobsView(generics.ListAPIView):
+    serializer_class = JobSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = JobFeedCursorPagination
+
+    def get_queryset(self):
+        return (
+            Job.objects
+            .filter(status=Job.Status.OPEN)
+            .select_related("employer", "employer__user")
+            .order_by("-created_at")
+        )
+
+
+# ------------------------------------------------------------------
+# Employer job management
+# ------------------------------------------------------------------
 
 class JobDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = JobSerializer
@@ -151,7 +210,9 @@ class EmployerJobListView(generics.ListAPIView):
         )
 
 
+# ------------------------------------------------------------------
 # Applications
+# ------------------------------------------------------------------
 
 class ApplicationCreateView(generics.CreateAPIView):
     serializer_class = ApplicationSerializer
@@ -184,9 +245,7 @@ class MyApplicationsView(generics.ListAPIView):
     def get_queryset(self):
         return (
             Application.objects
-            .filter(
-                candidate=self.request.user.candidate_profile
-            )
+            .filter(candidate=self.request.user.candidate_profile)
             .select_related(
                 "job",
                 "job__employer",
@@ -202,12 +261,18 @@ class ApplicationDetailView(generics.RetrieveDestroyAPIView):
         permissions.IsAuthenticated,
         IsOwnerCandidate,
     ]
+
+
+# ------------------------------------------------------------------
 # Admin control
+# ------------------------------------------------------------------
+
 class VerifyUserView(APIView):
     permission_classes = [
         permissions.IsAuthenticated,
         IsAdmin,
     ]
+
     def post(self, request, user_id):
         try:
             target = User.objects.get(id=user_id)
@@ -216,8 +281,10 @@ class VerifyUserView(APIView):
                 {"detail": "User not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
         target.is_verified = True
         target.save(update_fields=["is_verified"])
+
         return Response(
             {
                 "detail": f"{target.email} marked as verified."
